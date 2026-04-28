@@ -2,125 +2,91 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Defensive Duel Value — Speed of Play Explainer</title>
+<title>Explore Defensive Duel Value</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<style>
-:root {
-  --bg: #0f1418;
-  --panel: #18222a;
-  --panel2: #1f2d36;
-  --line: #2a3b48;
-  --fg: #e7eef3;
-  --muted: #8fa3b0;
-  --accent: #6ee7b7;
-  --red: #f87171;
-  --blue: #60a5fa;
-  --amber: #fbbf24;
-  --green: #6ee7b7;
-}
-* { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; }
-body { padding: 24px 36px 80px; max-width: 1400px; margin: 0 auto; }
-h1 { font-weight: 700; font-size: 28px; margin: 0 0 6px; }
-h2 { font-weight: 600; font-size: 18px; margin: 24px 0 10px; color: var(--fg); }
-h3 { font-weight: 600; font-size: 13px; margin: 12px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
-p { line-height: 1.55; color: #cfdae2; }
-small, .muted { color: var(--muted); }
-code { background: #0b1116; padding: 1px 5px; border-radius: 3px; font-size: 13px; color: #b5e3d0; }
-
-.grid-2 { display: grid; gap: 16px; grid-template-columns: 1.15fr 1fr; align-items: stretch; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
-.card.pitch-card { padding: 14px; }
-
-#pitch-wrap { position: relative; width: 100%; user-select: none; }
-#pitch-wrap svg { display: block; width: 100%; height: auto; }
-
-.outcome-buttons { display: flex; gap: 8px; margin: 10px 0 0; flex-wrap: wrap; }
-.outcome-btn {
-  flex: 1; min-width: 120px; padding: 10px 14px; border-radius: 8px;
-  border: 1px solid var(--line); background: #0b1116; color: var(--fg);
-  cursor: pointer; font-size: 14px; transition: all 120ms ease; font-weight: 500;
-}
-.outcome-btn:hover { background: #162129; }
-.outcome-btn.selected { border-width: 2px; padding: 9px 13px; }
-.outcome-btn.selected.recovered { border-color: var(--green); background: rgba(110,231,183,0.14); color: var(--green); }
-.outcome-btn.selected.stopped { border-color: var(--amber); background: rgba(251,191,36,0.14); color: var(--amber); }
-.outcome-btn.selected.beat { border-color: var(--red); background: rgba(248,113,113,0.14); color: var(--red); }
-
-.slider-group { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
-.slider-row { display: grid; grid-template-columns: 160px 1fr 72px; align-items: center; gap: 10px; font-size: 12.5px; }
-.slider-row .lbl { color: var(--fg); font-weight: 500; }
-.slider-row input[type=range] {
-  width: 100%; accent-color: var(--accent); height: 4px; background: transparent;
-}
-.slider-row .val { font-family: 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 12px; color: var(--fg); text-align: right; }
-.slider-row .ticks { color: var(--muted); font-size: 10px; display: flex; justify-content: space-between; grid-column: 2; }
-.slider-row .sub { color: var(--muted); font-size: 11px; margin-top: 1px; }
-
-.bar-row { display: grid; grid-template-columns: 120px 1fr 82px; align-items: center; gap: 8px; margin: 5px 0; font-size: 13px; }
-.bar-row .label { color: var(--muted); }
-.bar-track { background: #0b1116; border: 1px solid var(--line); border-radius: 3px; height: 20px; position: relative; overflow: hidden; }
-.bar-fill { height: 100%; border-radius: 2px; transition: width 220ms ease; }
-.bar-row .value { text-align: right; font-variant-numeric: tabular-nums; color: var(--fg); font-family: 'SFMono-Regular', Menlo, Consolas, monospace; }
-.bar-row.selected .label { color: var(--fg); font-weight: 600; }
-.bar-row.selected .bar-track { box-shadow: 0 0 0 1px var(--accent); }
-
-.formula-block { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; font-family: 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.75; overflow-x: auto; }
-.formula-block .sym { color: var(--muted); }
-.formula-block .val { color: var(--fg); font-weight: 600; }
-.formula-block .pos { color: var(--green); }
-.formula-block .neg { color: var(--red); }
-
-.final { margin-top: 10px; font-size: 17px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.final .value-box { font-family: 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 26px; font-weight: 700; padding: 6px 14px; border-radius: 6px; letter-spacing: 0.5px; }
-
-.stat-strip { display: flex; gap: 18px; margin: 8px 0 0; flex-wrap: wrap; font-size: 13px; }
-.stat-strip .stat { display: flex; flex-direction: column; gap: 2px; }
-.stat-strip .stat .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
-.stat-strip .stat .v { font-family: 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 15px; font-weight: 600; }
-
-.hist-wrap { position: relative; margin-top: 8px; }
-.hist-wrap img { width: 100%; border-radius: 8px; display: block; }
-.hist-wrap .marker { position: absolute; top: 0; bottom: 38px; width: 2px; background: #ff4d5a; pointer-events: none; }
-.hist-wrap .marker-cap { position: absolute; top: 0; transform: translateX(-50%); color: #ff4d5a; font-size: 11px; background: var(--panel); padding: 2px 6px; border-radius: 3px; border: 1px solid rgba(255,77,90,0.4); white-space: nowrap; font-weight: 600; }
-
-.surface-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
-.surface-panel { background: #0b1116; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
-.surface-panel canvas { display: block; width: 100%; height: auto; background: #1b2a1f; border-radius: 4px; }
-.surface-title { font-size: 12px; color: var(--muted); margin: 2px 0 4px; font-family: 'SFMono-Regular', Menlo, Consolas, monospace; }
-.colorbar { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted); margin-top: 4px; }
-.colorbar .bar { flex: 1; height: 8px; border-radius: 2px; border: 1px solid var(--line); }
-
-.tabs { display: flex; gap: 4px; margin: 10px 0 4px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-.tab { padding: 7px 13px; cursor: pointer; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; }
-.tab.active { color: var(--fg); border-bottom-color: var(--accent); }
-.tab:hover { color: var(--fg); }
-
-.empty-hint { color: var(--muted); font-size: 13px; font-style: italic; padding: 28px 0; text-align: center; }
-details { margin: 10px 0; }
-summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 4px 0; }
-summary:hover { color: var(--fg); }
-.formula-math { font-family: 'SFMono-Regular', Menlo, Consolas, monospace; padding: 10px 14px; background: #0b1116; border-radius: 6px; border: 1px solid var(--line); font-size: 13px; }
-
-.badge { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: #0b1116; border: 1px solid var(--line); color: var(--muted); display: inline-block; }
-.badge.recovered { background: rgba(110,231,183,0.12); color: var(--green); border-color: rgba(110,231,183,0.3); }
-.badge.stopped { background: rgba(251,191,36,0.12); color: var(--amber); border-color: rgba(251,191,36,0.3); }
-.badge.beat { background: rgba(248,113,113,0.12); color: var(--red); border-color: rgba(248,113,113,0.3); }
-
-@media (max-width: 960px) {
-  .grid-2 { grid-template-columns: 1fr; }
-  .surface-row { grid-template-columns: 1fr; }
-}
-</style>
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)']],
+    displayMath: [['\\[', '\\]']],
+  },
+  options: { renderActions: { addMenu: [] } },
+};
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<link rel="stylesheet" href="ddv_explainer.css" />
 </head>
 <body>
 
-<h1>Defensive Duel Value — Speed of Play Explainer</h1>
-<p class="muted" style="max-width:920px">
+<h1>Explore Defensive Duel Value</h1>
+
+<div class="grid-2" style="margin-top:14px">
+  <div class="card">
+    <h2 style="margin-top:0">Background</h2>
+    <p>
+      Valuing actions in soccer is one of the hardest and most crucial parts for both game analysis and recruiting.
+      Frameworks like xG, xT, and VAEP excel at modeling <em>offensive</em> contributions but struggle with defensive
+      actions that <em>prevent</em> events rather than cause them. This work takes a counterfactual approach: measuring
+      how a defender's action shifts danger relative to what was expected given the duel's context.
+    </p>
+    <p>
+      Concretely, for an observed outcome \(c^\star\) at location \((x, y)\) with speed-of-play context \(\text{SoP}\),
+      the duel's value is
+      \[
+        \mathrm{DDV} \;=\; \underbrace{\sum_{c}\; P(c\mid x,y,\text{SoP})\,P(\text{goal}\mid c,x,y,\text{SoP})}_{\text{expected danger}}
+        \;-\; \underbrace{P(\text{goal}\mid c^\star,x,y,\text{SoP})}_{\text{realized danger}}.
+      \]
+      Positive DDV means the defender averted more danger than the average duel in that situation would have.
+    </p>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Where defensive duels happen</h2>
+    <p class="muted" style="margin:4px 0 8px">
+      Smoothed marginal density of defensive-duel start locations across the dataset. Bright bands show where contests
+      cluster — wide channels in our own half and along the defensive third — and motivate why DDV is most informative
+      where duels actually occur.
+    </p>
+    <img id="duel-xy-img" alt="Defensive duel location heatmap"
+         style="display:block; margin:0 auto; max-width:280px; width:100%; height:auto;
+                border-radius:8px; background:#0b1116" />
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h2 style="margin-top:0">Methods</h2>
+  <p>
+    Data from <b>800k+ defensive duels</b> across <b>7k+ Wyscout matches</b> were analyzed. For each duel, outcome and
+    spatial features were extracted, and a binary danger label was assigned based on whether a goal was conceded within
+    20 seconds of the duel. Three speed-of-play features captured pre-duel ball tempo:
+  </p>
+  <ul>
+    <li>net x-displacement of the ball in the prior 30 s — \(\Delta x_{30}\)</li>
+    <li>total ball distance in the prior 30 s — \(d_{30}\)</li>
+    <li>ratio of ball distance over 30 vs. 60 s — \(d_{30}/d_{60}\)</li>
+  </ul>
+  <p>
+    Two LightGBM models were trained on the spatial and speed-of-play features:
+  </p>
+  <p class="formula-math" style="margin:8px 0">
+    \[
+      \text{outcome model:}\quad P(c\mid x,y,\text{SoP}),\;\; c\in\{\text{beat, stopped, recovered}\}
+    \]
+    \[
+      \text{danger model:}\quad P(\text{goal in next 20s}\mid c, x, y,\text{SoP})
+    \]
+  </p>
+  <p>
+    Combining the two yields the per-duel value via the formula above. The interactive panels below let you query both
+    surfaces at any \((x, y, \text{SoP})\) the models support.
+  </p>
+</div>
+
+<h2 style="margin-top:28px">Interactive duel breakdown</h2>
+<p class="muted" style="max-width:920px;margin:0 0 12px">
   Click anywhere on the defensive half to place a duel, pick the outcome, and adjust the three speed-of-play context
-  sliders to see how the location prior <code>P(outcome | x, y, speed&nbsp;of&nbsp;play)</code> and the conditional
-  goal risk <code>P(goal | x, y, outcome, speed&nbsp;of&nbsp;play)</code> respond. The <b>Duel Value</b> is the gap
-  between expected and realized danger, both evaluated at the same location and speed-of-play context.
+  sliders to see how the location prior \(P(\text{outcome}\mid x, y, \text{SoP})\) and the conditional goal risk
+  \(P(\text{goal}\mid x, y, \text{outcome}, \text{SoP})\) respond. The <b>Duel Value</b> is the gap between expected
+  and realized danger, both evaluated at the same location and speed-of-play context.
 </p>
 
 <div class="grid-2">
@@ -147,14 +113,14 @@ summary:hover { color: var(--fg); }
       Click on the pitch and pick an outcome to see the DDV breakdown.
     </div>
     <div id="breakdown" style="display:none">
-      <h3>P(outcome | x, y, speed&nbsp;of&nbsp;play)</h3>
+      <h3>\(P(\text{outcome}\mid x, y, \text{SoP})\)</h3>
       <p class="muted" style="margin:4px 0 8px;font-size:13px">
         Bars shift when you move the speed-of-play sliders — how often each outcome occurs at this location given this
         context.
       </p>
       <div id="bars-outcome"></div>
 
-      <h3 style="margin-top:16px">P(goal | x, y, outcome, speed&nbsp;of&nbsp;play)</h3>
+      <h3 style="margin-top:16px">\(P(\text{goal}\mid x, y, \text{outcome}, \text{SoP})\)</h3>
       <p class="muted" style="margin:4px 0 8px;font-size:13px">
         Chance a goal is conceded in the next 20&nbsp;s given the location, outcome, and speed-of-play context.
       </p>
@@ -195,37 +161,66 @@ summary:hover { color: var(--fg); }
   <p class="muted" style="margin:4px 0 8px">
     The speed-of-play sliders below control the context used by <em>all four</em> surface tabs. Each tab shows one
     panel per outcome (beat / recovered / stopped). Toggle tabs to see where the models place each quantity across the
-    defensive half. The last tab weights DDV by where duels actually occur — highlighting locations where typical
-    dangerous duels happen.
+    defensive half.
   </p>
 
   <h3 style="margin-top:8px">Speed of play context for surfaces</h3>
   <div class="slider-group" id="sop-sliders-surface"></div>
 
   <div class="tabs">
-    <div class="tab active" data-tab="outcome">P(outcome | x, y, speed&nbsp;of&nbsp;play)</div>
-    <div class="tab" data-tab="goal">P(goal | x, y, outcome, speed&nbsp;of&nbsp;play)</div>
-    <div class="tab" data-tab="ddv">DDV | x, y, outcome, speed&nbsp;of&nbsp;play</div>
-    <div class="tab" data-tab="ddv_duel">DDV × P(duel | x, y)</div>
+    <div class="tab active" data-tab="outcome">\(P(\text{outcome}\mid x, y, \text{SoP})\)</div>
+    <div class="tab" data-tab="goal">\(P(\text{goal}\mid x, y, \text{outcome}, \text{SoP})\)</div>
+    <div class="tab" data-tab="ddv">\(\mathrm{DDV}\mid x, y, \text{outcome}, \text{SoP}\)</div>
+    <div class="tab" data-tab="ddv_duel">\(\mathrm{DDV}\,\cdot\,P(\text{duel}\mid x, y)\)</div>
   </div>
+  <p class="muted" id="surface-tab-desc" style="margin:8px 2px 0;font-size:13px"></p>
   <div class="surface-row" id="surface-row"></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h2>How speed of play impacts the probabilities</h2>
+  <p class="muted" style="margin:4px 0 10px">
+    How much does shifting a speed-of-play feature alone change the model's output at each location? Each panel is a
+    <em>difference heatmap</em>: the probability evaluated with the SoP feature pinned at its <b>90th percentile</b>
+    minus the probability evaluated with that feature pinned at its <b>10th percentile</b>, with the other two SoP
+    features held at their population medians. Hot cells = the location is markedly more likely to produce that
+    outcome (or concede a goal) under high-tempo play; cold cells = high tempo suppresses it. Panels are arranged as
+    <em>SoP feature (rows) × outcome class (columns)</em>; use the tabs to switch between the duel outcome and
+    conditional goal models.
+  </p>
+  <div class="tabs">
+    <div class="tab active" data-sop-tab="outcome">\(\Delta P(\text{outcome}\mid x, y, \text{SoP})\)</div>
+    <div class="tab" data-sop-tab="goal">\(\Delta P(\text{goal}\mid x, y, \text{outcome}, \text{SoP})\)</div>
+  </div>
+  <p class="muted" id="sop-tab-desc" style="margin:8px 2px 8px;font-size:13px"></p>
+  <img id="sop-impact-img" alt="Speed-of-play sensitivity panels"
+       style="width:100%; border-radius:8px; display:block; background:#0b1116" />
 </div>
 
 <details style="margin-top:18px">
   <summary>Formula derivation</summary>
   <div class="formula-math" style="margin-top:8px">
     <p>Expected danger is the marginal goal probability at this location given the speed-of-play context:</p>
-    <pre style="white-space:pre-wrap">expected = Σ_c  p(c | x, y, speed of play) · p(goal | c, x, y, speed of play)</pre>
-    <p>Realized danger is the goal probability under the actual observed outcome c*:</p>
-    <pre style="white-space:pre-wrap">realized = p(goal | c*, x, y, speed of play)</pre>
+    \[
+      \mathbb{E}[\text{danger}\mid x, y, \text{SoP}]
+        \;=\; \sum_{c}\; P(c\mid x, y, \text{SoP})\,P(\text{goal}\mid c, x, y, \text{SoP})
+    \]
+    <p>Realized danger is the goal probability under the actual observed outcome \(c^\star\):</p>
+    \[
+      \text{realized} \;=\; P(\text{goal}\mid c^\star, x, y, \text{SoP})
+    \]
     <p>Defender value is positive when the observed outcome beat expectations:</p>
-    <pre style="white-space:pre-wrap">DDV = expected − realized</pre>
+    \[
+      \mathrm{DDV} \;=\; \mathbb{E}[\text{danger}] - \text{realized}
+    \]
     <p>The final tab additionally weights DDV by duel density, so the visualization emphasises
     locations where dangerous duels <em>typically</em> happen:</p>
-    <pre style="white-space:pre-wrap">DDV × P(duel | x, y)</pre>
+    \[
+      \mathrm{DDV}_{\text{wt}}(x, y) \;=\; \mathrm{DDV}(x, y)\cdot P(\text{duel}\mid x, y)
+    \]
   </div>
 </details>
 
-<script src="ddv_explainer_sop.js"></script>
+<script src="ddv_explainer.js"></script>
 </body>
 </html>

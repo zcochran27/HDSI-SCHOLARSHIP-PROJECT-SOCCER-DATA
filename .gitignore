@@ -6,3 +6,5 @@
 render_latex.py
 render_poster_formulas.py
 defensive_duel_value_method.md
+/old html
+build_ddv_explainer_sop.py

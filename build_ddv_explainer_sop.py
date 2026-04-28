@@ -1,7 +1,8 @@
 """Build the SOP-aware interactive DDV explainer.
 
-Emits two files:
-    ddv_explainer_sop.html   — page skeleton + CSS, loads the JS below
+Emits three files:
+    ddv_explainer_sop.html   — page skeleton, links the CSS and JS below
+    ddv_explainer_sop.css    — all styling
     ddv_explainer_sop.js     — precomputed data (base64 Float32 arrays) and
                                 all interactive logic
 
@@ -19,17 +20,27 @@ import joblib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from mplsoccer import Pitch
 from scipy.ndimage import gaussian_filter
 
 ROOT = Path(__file__).parent
 MODELS = ROOT / "ddv_sop_models"
 PARQUET = ROOT / "data" / "defensive_duels_preprocessed.parquet"
 OUT_HTML = ROOT / "ddv_explainer_sop.html"
+OUT_CSS = ROOT / "ddv_explainer_sop.css"
 OUT_JS = ROOT / "ddv_explainer_sop.js"
 
 GRID_NX = 31   # 31 x-cells in [0, 60]
 GRID_NY = 21   # 21 y-cells in [0, 80]
 SOP_NS = 5     # 5 slider positions per speed-of-play feature (must match sop_meta quantiles)
+
+# Shared figure styling — all matplotlib output uses the same panel background
+# so embedded images blend with the dashboard cards (var(--panel) = #18222a).
+PANEL_BG = "#18222a"
+SPINE_COLOR = "#2a3b48"
+LABEL_COLOR = "#cfdae2"
+TITLE_COLOR = "#e7eef3"
+TICK_COLOR = "#8fa3b0"
 
 # User-facing labels for the three speed-of-play features.
 SOP_LABELS = {
@@ -122,34 +133,182 @@ def compute_duel_density(sop_cols):
     return H.astype(np.float32), int(len(d))
 
 
-# -------------------- histogram (static PNG, same as original) --------------------
+# -------------------- matplotlib figure helpers --------------------
+
+def _save_fig_as_data_uri(fig, dpi: int = 160) -> str:
+    """Common save → base64 data URI used by every embedded image."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", dpi=dpi,
+                facecolor=fig.get_facecolor())
+    buf.seek(0)
+    plt.close(fig)
+    return "data:image/png;base64," + base64.b64encode(buf.read()).decode()
+
+
+def _make_pitch():
+    """Build an mplsoccer Pitch styled to match the dashboard background."""
+    return Pitch(pitch_type="statsbomb", line_color="white",
+                 pitch_color=PANEL_BG, linewidth=1.0)
+
+
+def _style_colorbar(cbar):
+    cbar.ax.tick_params(colors=LABEL_COLOR, labelsize=8)
+    cbar.outline.set_edgecolor(SPINE_COLOR)
+
+
+# -------------------- histogram --------------------
 
 def render_histogram(values):
     lo, hi = np.percentile(values, [0.5, 99.5])
     fig_w_in, fig_h_in = 10.0, 2.6
     fig = plt.figure(figsize=(fig_w_in, fig_h_in))
-    fig.patch.set_facecolor("#18222a")
+    fig.patch.set_facecolor(PANEL_BG)
     left_frac, right_frac = 0.06, 0.985
     bottom_frac, top_frac = 0.30, 0.84
     ax = fig.add_axes([left_frac, bottom_frac, right_frac - left_frac, top_frac - bottom_frac])
-    ax.set_facecolor("#18222a")
+    ax.set_facecolor(PANEL_BG)
     ax.hist(np.clip(values, lo, hi), bins=120, color="#60a5fa", alpha=0.85, edgecolor="none")
-    ax.axvline(0, color="#8fa3b0", lw=1, ls="--")
+    ax.axvline(0, color=TICK_COLOR, lw=1, ls="--")
     ax.set_xlim(lo, hi)
     ax.set_xlabel("Duel value (goal probability averted relative to expectation)",
-                  color="#cfdae2", fontsize=10)
-    ax.set_ylabel("count", color="#cfdae2", fontsize=10)
-    ax.tick_params(colors="#8fa3b0", labelsize=9)
+                  color=LABEL_COLOR, fontsize=10)
+    ax.set_ylabel("count", color=LABEL_COLOR, fontsize=10)
+    ax.tick_params(colors=TICK_COLOR, labelsize=9)
     for spine in ax.spines.values():
-        spine.set_color("#2a3b48")
+        spine.set_color(SPINE_COLOR)
     ax.set_title(f"Distribution of DDV across {len(values):,} defensive duels",
-                 color="#e7eef3", fontsize=12, pad=8)
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", bbox_inches="tight", dpi=140, facecolor=fig.get_facecolor())
-    buf.seek(0)
-    plt.close(fig)
-    png = "data:image/png;base64," + base64.b64encode(buf.read()).decode()
+                 color=TITLE_COLOR, fontsize=12, pad=8)
+    png = _save_fig_as_data_uri(fig, dpi=140)
     return png, float(lo), float(hi), float(left_frac), float(right_frac)
+
+
+# -------------------- duel-density heatmap (Background section) --------------------
+
+def render_duel_xy(p_duel_grid: np.ndarray, n_duels: int) -> str:
+    """Render the smoothed defensive-duel density on the defensive half.
+
+    `p_duel_grid` has shape (GRID_NX, GRID_NY) indexed [ix, iy]; we transpose
+    to (NY, NX) so pcolormesh draws x along the horizontal axis.
+    """
+    pitch = _make_pitch()
+    fig, ax = plt.subplots(figsize=(4.5, 4.6))
+    fig.patch.set_facecolor(PANEL_BG)
+    ax.set_facecolor(PANEL_BG)
+    pitch.draw(ax=ax)
+
+    gx = np.linspace(0, 60, GRID_NX)
+    gy = np.linspace(0, 80, GRID_NY)
+    GX, GY = np.meshgrid(gx, gy)  # (NY, NX)
+    z = p_duel_grid.T
+
+    im = ax.pcolormesh(GX, GY, z, cmap="plasma", shading="auto",
+                       alpha=0.92, zorder=1)
+    ax.set_xlim(0, 62)
+    _style_colorbar(fig.colorbar(im, ax=ax, shrink=0.75, pad=0.02))
+    ax.set_title(f"Defensive-duel density  (n = {n_duels:,})",
+                 color=TITLE_COLOR, fontsize=11, pad=6)
+    fig.tight_layout()
+    return _save_fig_as_data_uri(fig, dpi=170)
+
+
+# -------------------- speed-of-play sensitivity (Δ heatmaps) --------------------
+
+def compute_sop_deltas(outcome_model, goal_cond_model, class_names, sop_cols):
+    """Per-feature Δ surfaces using the empirical p10 / p90 of each SoP feature.
+
+    Returns:
+        delta_outcome (F, K, NX, NY) — P(outcome | x, y, SoP_p90) − P(outcome | x, y, SoP_p10)
+        delta_goal    (F, K, NX, NY) — P(goal    | x, y, c, SoP_p90) − P(goal    | x, y, c, SoP_p10)
+
+    Other SoP features are held at their population median while one is varied.
+    """
+    duels = pd.read_parquet(PARQUET)
+    d = duels[duels.is_defensive_duel & (duels.start_x < 60)].dropna(subset=sop_cols)
+    sop_arr = d[sop_cols].to_numpy()
+    sop_low = np.quantile(sop_arr, 0.10, axis=0)
+    sop_med = np.quantile(sop_arr, 0.50, axis=0)
+    sop_high = np.quantile(sop_arr, 0.90, axis=0)
+
+    F, K = len(sop_cols), len(class_names)
+    gx = np.linspace(0, 60, GRID_NX)
+    gy = np.linspace(0, 80, GRID_NY)
+    GX, GY = np.meshgrid(gx, gy, indexing="ij")
+    grid_xy = np.column_stack([GX.ravel(), GY.ravel()])
+    G = len(grid_xy)
+
+    delta_outcome = np.zeros((F, K, GRID_NX, GRID_NY), dtype=np.float32)
+    delta_goal    = np.zeros((F, K, GRID_NX, GRID_NY), dtype=np.float32)
+
+    for f in range(F):
+        sl = sop_med.copy(); sl[f] = sop_low[f]
+        sh = sop_med.copy(); sh[f] = sop_high[f]
+        X_l = np.column_stack([grid_xy, np.tile(sl, (G, 1))])
+        X_h = np.column_stack([grid_xy, np.tile(sh, (G, 1))])
+        po_diff = outcome_model.predict_proba(X_h) - outcome_model.predict_proba(X_l)  # (G, K)
+        for c in range(K):
+            delta_outcome[f, c] = po_diff[:, c].reshape(GRID_NX, GRID_NY)
+            X_h_c = np.column_stack([X_h, np.full(G, c)])
+            X_l_c = np.column_stack([X_l, np.full(G, c)])
+            pg_h = goal_cond_model.predict_proba(X_h_c)[:, 1]
+            pg_l = goal_cond_model.predict_proba(X_l_c)[:, 1]
+            delta_goal[f, c] = (pg_h - pg_l).reshape(GRID_NX, GRID_NY)
+
+    return delta_outcome, delta_goal
+
+
+def render_sop_impact(deltas: np.ndarray, kind: str, class_names, sop_cols) -> str:
+    """Render the (F × K) Δ-grid as a single PNG.
+
+    Per-row vmax (one shared across the K outcomes for each SoP feature),
+    matching the original notebook so colors are comparable along a row but
+    not across rows.
+
+    `kind` is "outcome" or "goal" — controls colormap and title prefix.
+    """
+    F, K = deltas.shape[:2]
+    pitch = _make_pitch()
+
+    gx = np.linspace(0, 60, GRID_NX)
+    gy = np.linspace(0, 80, GRID_NY)
+    GX, GY = np.meshgrid(gx, gy)  # (NY, NX)
+    cmap = "viridis" if kind == "outcome" else "magma"
+
+    fig, axes = plt.subplots(F, K, figsize=(K * 3.6, F * 3.6), squeeze=False)
+    fig.patch.set_facecolor(PANEL_BG)
+
+    for f in range(F):
+        vmax = float(np.abs(deltas[f]).max())
+        last_im = None
+        for c in range(K):
+            ax = axes[f, c]
+            ax.set_facecolor(PANEL_BG)
+            pitch.draw(ax=ax)
+            z = deltas[f, c].T  # (NY, NX)
+            last_im = ax.pcolormesh(GX, GY, z, cmap=cmap, shading="auto",
+                                    vmin=-vmax, vmax=vmax, alpha=0.92, zorder=1)
+            ax.set_xlim(0, 62)
+            # Column header — outcome class — only on the top row.
+            if f == 0:
+                head = (f"ΔP({class_names[c]})" if kind == "outcome"
+                        else f"ΔP(goal | {class_names[c]})")
+                ax.set_title(head, color=TITLE_COLOR, fontsize=14,
+                             pad=10, fontweight="bold")
+            # Row label — SoP feature — only on the first column.
+            if c == 0:
+                ax.set_ylabel(SOP_LABELS.get(sop_cols[f], sop_cols[f]),
+                              color=LABEL_COLOR, fontsize=11, labelpad=10)
+        # One shared colorbar per row (right edge) so the row's vmax is visible.
+        _style_colorbar(fig.colorbar(last_im, ax=axes[f, :].tolist(),
+                                     shrink=0.75, pad=0.04, fraction=0.035))
+
+    suptitle = ("Δ outcome probability  ·  SoP feature at 90th − 10th percentile "
+                "(others held at median)" if kind == "outcome"
+                else "Δ conditional goal probability  ·  SoP feature at 90th − 10th "
+                "percentile (others held at median)")
+    fig.suptitle(suptitle, color=TITLE_COLOR, fontsize=12, y=0.995)
+    fig.subplots_adjust(top=0.93)
+
+    return _save_fig_as_data_uri(fig, dpi=140)
 
 
 # -------------------- payload --------------------
@@ -171,6 +330,13 @@ def build_payload():
 
     hist_png, hist_lo, hist_hi, hist_left_frac, hist_right_frac = render_histogram(values)
     percentiles = [float(q) for q in np.percentile(values, np.arange(0, 101))]
+
+    duel_xy_png = render_duel_xy(p_duel_grid, n_duels_for_density)
+    delta_outcome, delta_goal = compute_sop_deltas(
+        outcome_model, goal_cond_model, class_names, sop_cols
+    )
+    sop_outcome_png = render_sop_impact(delta_outcome, "outcome", class_names, sop_cols)
+    sop_goal_png    = render_sop_impact(delta_goal,    "goal",    class_names, sop_cols)
 
     return {
         "class_names": class_names,
@@ -205,20 +371,18 @@ def build_payload():
             "hist_lo": hist_lo, "hist_hi": hist_hi,
             "hist_left_frac": hist_left_frac, "hist_right_frac": hist_right_frac,
         },
-        "images": {"histogram": hist_png},
+        "images": {
+            "histogram": hist_png,
+            "duel_xy": duel_xy_png,
+            "sop_outcome_sensitivity": sop_outcome_png,
+            "sop_goal_sensitivity": sop_goal_png,
+        },
     }
 
 
-# -------------------- HTML + JS templates --------------------
+# -------------------- CSS + HTML + JS templates --------------------
 
-HTML_TEMPLATE = r"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<title>Defensive Duel Value — Speed of Play Explainer</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<style>
-:root {
+CSS_TEMPLATE = r""":root {
   --bg: #0f1418;
   --panel: #18222a;
   --panel2: #1f2d36;
@@ -299,7 +463,7 @@ code { background: #0b1116; padding: 1px 5px; border-radius: 3px; font-size: 13p
 
 .surface-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
 .surface-panel { background: #0b1116; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
-.surface-panel canvas { display: block; width: 100%; height: auto; background: #1b2a1f; border-radius: 4px; }
+.surface-panel canvas { display: block; width: 100%; height: auto; background: var(--panel); border-radius: 4px; }
 .surface-title { font-size: 12px; color: var(--muted); margin: 2px 0 4px; font-family: 'SFMono-Regular', Menlo, Consolas, monospace; }
 .colorbar { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted); margin-top: 4px; }
 .colorbar .bar { flex: 1; height: 8px; border-radius: 2px; border: 1px solid var(--line); }
@@ -324,16 +488,98 @@ summary:hover { color: var(--fg); }
   .grid-2 { grid-template-columns: 1fr; }
   .surface-row { grid-template-columns: 1fr; }
 }
-</style>
+"""
+
+
+HTML_TEMPLATE = r"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Explore Defensive Duel Value</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)']],
+    displayMath: [['\\[', '\\]']],
+  },
+  options: { renderActions: { addMenu: [] } },
+};
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<link rel="stylesheet" href="ddv_explainer_sop.css" />
 </head>
 <body>
 
-<h1>Defensive Duel Value — Speed of Play Explainer</h1>
-<p class="muted" style="max-width:920px">
+<h1>Explore Defensive Duel Value</h1>
+
+<div class="grid-2" style="margin-top:14px">
+  <div class="card">
+    <h2 style="margin-top:0">Background</h2>
+    <p>
+      Valuing actions in soccer is one of the hardest and most crucial parts for both game analysis and recruiting.
+      Frameworks like xG, xT, and VAEP excel at modeling <em>offensive</em> contributions but struggle with defensive
+      actions that <em>prevent</em> events rather than cause them. This work takes a counterfactual approach: measuring
+      how a defender's action shifts danger relative to what was expected given the duel's context.
+    </p>
+    <p>
+      Concretely, for an observed outcome \(c^\star\) at location \((x, y)\) with speed-of-play context \(\text{SoP}\),
+      the duel's value is
+      \[
+        \mathrm{DDV} \;=\; \underbrace{\sum_{c}\; P(c\mid x,y,\text{SoP})\,P(\text{goal}\mid c,x,y,\text{SoP})}_{\text{expected danger}}
+        \;-\; \underbrace{P(\text{goal}\mid c^\star,x,y,\text{SoP})}_{\text{realized danger}}.
+      \]
+      Positive DDV means the defender averted more danger than the average duel in that situation would have.
+    </p>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Where defensive duels happen</h2>
+    <p class="muted" style="margin:4px 0 8px">
+      Smoothed marginal density of defensive-duel start locations across the dataset. Bright bands show where contests
+      cluster — wide channels in our own half and along the defensive third — and motivate why DDV is most informative
+      where duels actually occur.
+    </p>
+    <img id="duel-xy-img" alt="Defensive duel location heatmap"
+         style="display:block; margin:0 auto; max-width:280px; width:100%; height:auto;
+                border-radius:8px; background:#0b1116" />
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h2 style="margin-top:0">Methods</h2>
+  <p>
+    Data from <b>800k+ defensive duels</b> across <b>7k+ Wyscout matches</b> were analyzed. For each duel, outcome and
+    spatial features were extracted, and a binary danger label was assigned based on whether a goal was conceded within
+    20 seconds of the duel. Three speed-of-play features captured pre-duel ball tempo:
+  </p>
+  <ul>
+    <li>net x-displacement of the ball in the prior 30 s — \(\Delta x_{30}\)</li>
+    <li>total ball distance in the prior 30 s — \(d_{30}\)</li>
+    <li>ratio of ball distance over 30 vs. 60 s — \(d_{30}/d_{60}\)</li>
+  </ul>
+  <p>
+    Two LightGBM models were trained on the spatial and speed-of-play features:
+  </p>
+  <p class="formula-math" style="margin:8px 0">
+    \[
+      \text{outcome model:}\quad P(c\mid x,y,\text{SoP}),\;\; c\in\{\text{beat, stopped, recovered}\}
+    \]
+    \[
+      \text{danger model:}\quad P(\text{goal in next 20s}\mid c, x, y,\text{SoP})
+    \]
+  </p>
+  <p>
+    Combining the two yields the per-duel value via the formula above. The interactive panels below let you query both
+    surfaces at any \((x, y, \text{SoP})\) the models support.
+  </p>
+</div>
+
+<h2 style="margin-top:28px">Interactive duel breakdown</h2>
+<p class="muted" style="max-width:920px;margin:0 0 12px">
   Click anywhere on the defensive half to place a duel, pick the outcome, and adjust the three speed-of-play context
-  sliders to see how the location prior <code>P(outcome | x, y, speed&nbsp;of&nbsp;play)</code> and the conditional
-  goal risk <code>P(goal | x, y, outcome, speed&nbsp;of&nbsp;play)</code> respond. The <b>Duel Value</b> is the gap
-  between expected and realized danger, both evaluated at the same location and speed-of-play context.
+  sliders to see how the location prior \(P(\text{outcome}\mid x, y, \text{SoP})\) and the conditional goal risk
+  \(P(\text{goal}\mid x, y, \text{outcome}, \text{SoP})\) respond. The <b>Duel Value</b> is the gap between expected
+  and realized danger, both evaluated at the same location and speed-of-play context.
 </p>
 
 <div class="grid-2">
@@ -360,14 +606,14 @@ summary:hover { color: var(--fg); }
       Click on the pitch and pick an outcome to see the DDV breakdown.
     </div>
     <div id="breakdown" style="display:none">
-      <h3>P(outcome | x, y, speed&nbsp;of&nbsp;play)</h3>
+      <h3>\(P(\text{outcome}\mid x, y, \text{SoP})\)</h3>
       <p class="muted" style="margin:4px 0 8px;font-size:13px">
         Bars shift when you move the speed-of-play sliders — how often each outcome occurs at this location given this
         context.
       </p>
       <div id="bars-outcome"></div>
 
-      <h3 style="margin-top:16px">P(goal | x, y, outcome, speed&nbsp;of&nbsp;play)</h3>
+      <h3 style="margin-top:16px">\(P(\text{goal}\mid x, y, \text{outcome}, \text{SoP})\)</h3>
       <p class="muted" style="margin:4px 0 8px;font-size:13px">
         Chance a goal is conceded in the next 20&nbsp;s given the location, outcome, and speed-of-play context.
       </p>
@@ -408,34 +654,63 @@ summary:hover { color: var(--fg); }
   <p class="muted" style="margin:4px 0 8px">
     The speed-of-play sliders below control the context used by <em>all four</em> surface tabs. Each tab shows one
     panel per outcome (beat / recovered / stopped). Toggle tabs to see where the models place each quantity across the
-    defensive half. The last tab weights DDV by where duels actually occur — highlighting locations where typical
-    dangerous duels happen.
+    defensive half.
   </p>
 
   <h3 style="margin-top:8px">Speed of play context for surfaces</h3>
   <div class="slider-group" id="sop-sliders-surface"></div>
 
   <div class="tabs">
-    <div class="tab active" data-tab="outcome">P(outcome | x, y, speed&nbsp;of&nbsp;play)</div>
-    <div class="tab" data-tab="goal">P(goal | x, y, outcome, speed&nbsp;of&nbsp;play)</div>
-    <div class="tab" data-tab="ddv">DDV | x, y, outcome, speed&nbsp;of&nbsp;play</div>
-    <div class="tab" data-tab="ddv_duel">DDV × P(duel | x, y)</div>
+    <div class="tab active" data-tab="outcome">\(P(\text{outcome}\mid x, y, \text{SoP})\)</div>
+    <div class="tab" data-tab="goal">\(P(\text{goal}\mid x, y, \text{outcome}, \text{SoP})\)</div>
+    <div class="tab" data-tab="ddv">\(\mathrm{DDV}\mid x, y, \text{outcome}, \text{SoP}\)</div>
+    <div class="tab" data-tab="ddv_duel">\(\mathrm{DDV}\,\cdot\,P(\text{duel}\mid x, y)\)</div>
   </div>
+  <p class="muted" id="surface-tab-desc" style="margin:8px 2px 0;font-size:13px"></p>
   <div class="surface-row" id="surface-row"></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h2>How speed of play impacts the probabilities</h2>
+  <p class="muted" style="margin:4px 0 10px">
+    How much does shifting a speed-of-play feature alone change the model's output at each location? Each panel is a
+    <em>difference heatmap</em>: the probability evaluated with the SoP feature pinned at its <b>90th percentile</b>
+    minus the probability evaluated with that feature pinned at its <b>10th percentile</b>, with the other two SoP
+    features held at their population medians. Hot cells = the location is markedly more likely to produce that
+    outcome (or concede a goal) under high-tempo play; cold cells = high tempo suppresses it. Panels are arranged as
+    <em>SoP feature (rows) × outcome class (columns)</em>; use the tabs to switch between the duel outcome and
+    conditional goal models.
+  </p>
+  <div class="tabs">
+    <div class="tab active" data-sop-tab="outcome">\(\Delta P(\text{outcome}\mid x, y, \text{SoP})\)</div>
+    <div class="tab" data-sop-tab="goal">\(\Delta P(\text{goal}\mid x, y, \text{outcome}, \text{SoP})\)</div>
+  </div>
+  <p class="muted" id="sop-tab-desc" style="margin:8px 2px 8px;font-size:13px"></p>
+  <img id="sop-impact-img" alt="Speed-of-play sensitivity panels"
+       style="width:100%; border-radius:8px; display:block; background:#0b1116" />
 </div>
 
 <details style="margin-top:18px">
   <summary>Formula derivation</summary>
   <div class="formula-math" style="margin-top:8px">
     <p>Expected danger is the marginal goal probability at this location given the speed-of-play context:</p>
-    <pre style="white-space:pre-wrap">expected = Σ_c  p(c | x, y, speed of play) · p(goal | c, x, y, speed of play)</pre>
-    <p>Realized danger is the goal probability under the actual observed outcome c*:</p>
-    <pre style="white-space:pre-wrap">realized = p(goal | c*, x, y, speed of play)</pre>
+    \[
+      \mathbb{E}[\text{danger}\mid x, y, \text{SoP}]
+        \;=\; \sum_{c}\; P(c\mid x, y, \text{SoP})\,P(\text{goal}\mid c, x, y, \text{SoP})
+    \]
+    <p>Realized danger is the goal probability under the actual observed outcome \(c^\star\):</p>
+    \[
+      \text{realized} \;=\; P(\text{goal}\mid c^\star, x, y, \text{SoP})
+    \]
     <p>Defender value is positive when the observed outcome beat expectations:</p>
-    <pre style="white-space:pre-wrap">DDV = expected − realized</pre>
+    \[
+      \mathrm{DDV} \;=\; \mathbb{E}[\text{danger}] - \text{realized}
+    \]
     <p>The final tab additionally weights DDV by duel density, so the visualization emphasises
     locations where dangerous duels <em>typically</em> happen:</p>
-    <pre style="white-space:pre-wrap">DDV × P(duel | x, y)</pre>
+    \[
+      \mathrm{DDV}_{\text{wt}}(x, y) \;=\; \mathrm{DDV}(x, y)\cdot P(\text{duel}\mid x, y)
+    \]
   </div>
 </details>
 
@@ -737,15 +1012,17 @@ function renderFormula(p_out, p_goal, outcome_idx, expected, realized, ddv) {
     ` = <span class="val">${(p_out[i] * p_goal[i]).toFixed(6)}</span>`
   ).join("<br>");
   const html = `
-    <div><b>expected danger</b> = Σ<sub>c</sub> p(c|x,y,speed of play) · p(goal|c,x,y,speed of play)</div>
+    <div><b>expected danger</b> \\(= \\sum_{c} P(c\\mid x,y,\\text{SoP})\\,P(\\text{goal}\\mid c,x,y,\\text{SoP})\\)</div>
     <div style="margin-left:14px">${terms}</div>
     <div style="margin-top:6px;margin-left:14px">sum = <span class="val">${expected.toFixed(6)}</span> = <span class="val">${pctStr(expected)}</span></div>
     <br>
-    <div><b>realized danger</b> = p(goal | observed=<span style="color:${CLS_COLOR[observed]}">${observed}</span>, x, y, speed of play) = <span class="val">${realized.toFixed(6)}</span> = <span class="val">${pctStr(realized)}</span></div>
+    <div><b>realized danger</b> \\(= P(\\text{goal}\\mid c^\\star{=}\\)<span style="color:${CLS_COLOR[observed]}">${observed}</span>\\(, x, y, \\text{SoP})\\) = <span class="val">${realized.toFixed(6)}</span> = <span class="val">${pctStr(realized)}</span></div>
     <br>
     <div><b>DDV</b> = expected − realized = <span class="val">${expected.toFixed(6)}</span> − <span class="val">${realized.toFixed(6)}</span> = <span class="${ddv >= 0 ? 'pos' : 'neg'} val">${sign4(ddv)}</span></div>
   `;
-  document.getElementById("formula-block").innerHTML = html;
+  const fb = document.getElementById("formula-block");
+  fb.innerHTML = html;
+  if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise([fb]);
   const box = document.getElementById("final-value");
   box.textContent = sign4(ddv);
   box.style.background = ddv >= 0 ? "rgba(110,231,183,0.15)" : "rgba(248,113,113,0.15)";
@@ -865,8 +1142,9 @@ function drawHeatmap(canvas, surface /*Float32Array length G*/, vmin, vmax, cmap
   offCtx.putImageData(img, 0, 0);
 
   ctx.clearRect(0, 0, w, h);
-  // Fill background pitch green so any uncovered margin looks right
-  ctx.fillStyle = "#1b2a1f";
+  // Match the dashboard panel color so surface canvases are visually
+  // consistent with the matplotlib heatmaps embedded elsewhere.
+  ctx.fillStyle = "#18222a";
   ctx.fillRect(0, 0, w, h);
 
   // Scale the heatmap up with nearest-neighbor (no smoothing for clarity).
@@ -1043,13 +1321,49 @@ function renderBreakdown() {
 document.querySelectorAll(".outcome-btn").forEach(b => {
   b.addEventListener("click", () => setOutcome(b.dataset.outcome));
 });
-document.querySelectorAll(".tab").forEach(t => {
+
+// Per-tab descriptions for the cross-pitch surface section.
+const SURFACE_TAB_DESCS = {
+  outcome:  "For each outcome class, the heatmap shows where defenders most often produce that result, given the current speed-of-play context. Brighter = higher probability. Compare panels to see which outcome dominates each region.",
+  goal:     "Conditional on the duel outcome, this is the chance a goal is conceded within 20 s. The 'beat' panel typically lights up nearer goal — losing a duel there is far more costly than near the touchline.",
+  ddv:      "DDV = expected danger − realized danger, evaluated cell-by-cell. Green cells are where the chosen outcome averts more danger than the location's baseline expects; red cells are where it concedes more.",
+  ddv_duel: "Same DDV surface as the previous tab, multiplied by the marginal duel density \\(P(\\text{duel}\\mid x, y)\\). This emphasises locations where realistic duels actually happen, so rare regions don't dominate the visualisation.",
+};
+
+function setSurfaceTabDesc(tab) {
+  const el = document.getElementById("surface-tab-desc");
+  el.innerHTML = SURFACE_TAB_DESCS[tab] || "";
+  if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise([el]);
+}
+
+document.querySelectorAll(".tab[data-tab]").forEach(t => {
   t.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    document.querySelectorAll(".tab[data-tab]").forEach(x => x.classList.remove("active"));
     t.classList.add("active");
     state.surfaceTab = t.dataset.tab;
+    setSurfaceTabDesc(state.surfaceTab);
     renderSurfaces();
   });
+});
+
+// SoP impact section: swap which sensitivity image is shown.
+const SOP_TAB_DESCS = {
+  outcome: "Each cell shows \\(P(\\text{outcome}\\mid x, y, \\text{SoP}_{p90}) - P(\\text{outcome}\\mid x, y, \\text{SoP}_{p10})\\) — the difference in outcome probability between the high-tempo (90th-percentile) and low-tempo (10th-percentile) values of one SoP feature, with the others held at the median. Rows = SoP feature, columns = outcome class. Bright = that location is far more likely to produce the outcome under high-tempo play; dark = high tempo suppresses it.",
+  goal:    "Same construction, but for the conditional goal model: each cell is \\(P(\\text{goal}\\mid x, y, \\text{outcome}, \\text{SoP}_{p90}) - P(\\text{goal}\\mid x, y, \\text{outcome}, \\text{SoP}_{p10})\\). Hot regions are where shifting from low- to high-tempo build-up materially raises the chance of conceding a goal in the next 20 s, conditional on the duel outcome.",
+};
+
+function setSopTab(tab) {
+  document.querySelectorAll(".tab[data-sop-tab]").forEach(x => {
+    x.classList.toggle("active", x.dataset.sopTab === tab);
+  });
+  const img = document.getElementById("sop-impact-img");
+  img.src = tab === "goal" ? DATA.images.sop_goal_sensitivity : DATA.images.sop_outcome_sensitivity;
+  const desc = document.getElementById("sop-tab-desc");
+  desc.innerHTML = SOP_TAB_DESCS[tab] || "";
+  if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise([desc]);
+}
+document.querySelectorAll(".tab[data-sop-tab]").forEach(t => {
+  t.addEventListener("click", () => setSopTab(t.dataset.sopTab));
 });
 
 // ===== Init =====
@@ -1062,6 +1376,9 @@ document.getElementById("hist-img").src = DATA.images.histogram;
 document.getElementById("hist-img").addEventListener("load", () => {
   if (state.x != null && state.outcome != null) renderBreakdown();
 });
+document.getElementById("duel-xy-img").src = DATA.images.duel_xy;
+setSurfaceTabDesc(state.surfaceTab);
+setSopTab("outcome");
 
 window.addEventListener("resize", () => {
   if (state.x != null && state.outcome != null) renderBreakdown();
@@ -1079,8 +1396,10 @@ def main():
         json.dumps(payload, separators=(",", ":")),
     )
     OUT_JS.write_text(js, encoding="utf-8")
+    OUT_CSS.write_text(CSS_TEMPLATE, encoding="utf-8")
     OUT_HTML.write_text(HTML_TEMPLATE, encoding="utf-8")
     print(f"Wrote {OUT_HTML}  ({OUT_HTML.stat().st_size / 1024:.1f} KB)")
+    print(f"Wrote {OUT_CSS}   ({OUT_CSS.stat().st_size / 1024:.1f} KB)")
     print(f"Wrote {OUT_JS}    ({OUT_JS.stat().st_size / 1024:.1f} KB)")
 
 
