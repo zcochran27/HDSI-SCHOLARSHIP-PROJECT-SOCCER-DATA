@@ -420,12 +420,9 @@ goals conceded.
 Each point is one (season, team) pair (n = 516 after the 8-game minimum
 filter). The fitted line has a clear negative slope: teams accumulating
 positive duel value over a season concede materially fewer goals per
-match. The relationship has visible scatter — duel value is one of many
-inputs into goals conceded, alongside set-piece defending, shot-stopping,
-pressing structure, and opponent finishing — but the slope and tightness
-are inconsistent with noise.
+match. 
 
-### 8.2 Univariate R² across duel features
+### 8.2 Comparison to base Defensive Duel Metrics
 
 For each candidate predictor we fit a univariate OLS with season-mean
 goals conceded as the target and report R²:
@@ -441,21 +438,11 @@ goals conceded as the target and report R²:
 
 Two readings:
 
-1. **`duel_value` beats every counting and rate stat.** Total season duel
+**`duel_value` beats every counting and rate stat.** Total season duel
    value (R² = 0.11) and per-duel mean duel value (R² = 0.10) are the
    strongest univariate predictors of season goals conceded. The DDV
    metric extracts more season-level defensive signal than recovery rate,
    stopped-progress count, or any of their volume-only equivalents.
-2. **Stopped-rate alone is uninformative.** Its R² of 0.00 confirms that
-   counting "halted progress" without modelling the *location* and
-   *outcome* of those halts is essentially useless for predicting goals
-   conceded. The DDV metric implicitly does that work — it weights each
-   `stopped` outcome by the goal probability it averted at the actual
-   pitch location, given the actual game state.
-
-The exact same ranking holds on a season-win-rate target (table not
-shown) and on the per-match level (`xg_against` is the strongest
-predictor as expected, with `duel_value_sum` second).
 
 ---
 
