@@ -255,7 +255,7 @@ left-to-right; the pitch shown is the defending half.
 ### 6.1 Where defensive duels happen
 
 <p align="center">
-  <img src="figures/sop_outcome/p_duel_xy.png" alt="Defensive duel density" width="420"/>
+  <img src="figures/sop_outcome/p_duel_xy.png" alt="Defensive duel density" width="300"/>
 </p>
 
 Duels concentrate along the wings and at the box edges, with vertical
