@@ -194,8 +194,8 @@ a ~4.5× lift over the 0.016 base prevalence, which is the right-shaped
 result for a sparse, location-conditioned label.
 
 <p align="center">
-  <img src="figures/prediction/roc_goal_cond.png" alt="Goal model ROC" width="430"/>
-  <img src="figures/prediction/calibration_goal_cond.png" alt="Goal model calibration" width="430"/>
+  <img src="figures/prediction/roc_goal_cond.png" alt="Goal model ROC" width="400"/>
+  <img src="figures/prediction/calibration_goal_cond.png" alt="Goal model calibration" width="400"/>
 </p>
 
 The ROC curve (left) climbs steeply in the bottom-left corner, hitting a
@@ -228,8 +228,8 @@ in Section 4 produces an unbiased baseline.
 | One-vs-rest AUC — stopped  | 0.554             |
 
 <p align="center">
-  <img src="figures/prediction/roc_outcome_ovr.png" alt="Outcome model ROC" width="430"/>
-  <img src="figures/prediction/calibration_outcome_ovr.png" alt="Outcome model calibration" width="430"/>
+  <img src="figures/prediction/roc_outcome_ovr.png" alt="Outcome model ROC" width="400"/>
+  <img src="figures/prediction/calibration_outcome_ovr.png" alt="Outcome model calibration" width="400"/>
 </p>
 
 OVR AUCs (left) are barely above chance (0.54–0.56). That's the honest
