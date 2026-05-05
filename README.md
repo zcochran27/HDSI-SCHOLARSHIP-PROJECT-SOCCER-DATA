@@ -404,43 +404,30 @@ goals conceded as the target and report R²:
 
 ## 9. Conclusion
 
-DDV is a per-duel metric that sums to a season-level defensive quality
-signal. It outperforms every counting and rate alternative on goals
-conceded, while remaining additive — every duel a player or team
-contributes to is on the same scale, and the leaderboard is just a
-groupby-and-sum.
+Defensive duel value is a per duel metric that illuminates above average
+defensive actions. Defensive duels are assigned value based on how the action
+compares to the expected result given the play's context. This value can be aggregated
+across all duels into a defensive value metric that you can now compare players and teams on.
 
 Two natural use cases:
 
-**Recruiting.** A defender's career profile in DDV captures the part of
-defensive quality that volume stats miss: how dangerous were the
-locations they engaged in, what outcomes did they produce relative to a
-league baseline at those locations, and how did they perform when the
-game state was already against them (high SOP, opponent attacking
-forward at speed). Total DDV rewards opportunity and skill in
-combination; per-duel DDV rewards efficiency. Filtering the per-duel
-leaderboard by minimum opportunity (`n` duels or minutes played) gives
-a noise-controlled efficiency rank that highlights players who are
-producing better-than-baseline outcomes at the moments where it matters.
-A defender with modest tackle counts but consistently positive per-duel
-DDV is producing real defensive value — the kind that the existing
-descriptive metrics will systematically undercount.
+**Recruiting.** A defender's profile that contains DDV now captures
+the quality of defensive player in their duels. Not only how much they win duels
+but whether they are able to consistently perform better and avert danger more than
+expected. This allows you to find defenders that remove danger from happening through
+their actions. 
 
-**Game and tactical analysis.** Aggregating DDV by zone, by phase of
-play (using the SOP signals), or by player on a single team surfaces
-where defensive value is being generated and where it's leaking. A
-team that accumulates positive value in central zones but negative
-value in wide channels is communicating a clear tactical pattern.
-Per-match DDV plotted against `xg_against` flags games where the team
-was structurally vulnerable but bailed out by the keeper, or vice
-versa. Analysts can use the per-outcome decomposition (`recovered` vs
-`stopped` vs `beat` value at each location) to ask whether a defender's
-lapse cost goal probability or merely produced a slower attacking
-phase.
+
+**Game and tactical analysis.** You can use DDV to find areas where a team/player
+is removing more danger than expected through duels OR giving up more danger
+than expected through duels allowing you to make necessary tactical changes.
+In addition the model itself gives insight into what makes defensive duels more
+difficult and more dangerous. This allows teams to make adjustments to avoid 
+defensive duels in difficult and dangerous situations to minimize the present danger.
 
 In both cases, the underlying premise is the same: every defensive duel
 should be priced in the units we actually care about — goal probability —
 and the price should account for *where* the duel happened and *what was
 going on around it*. DDV does that, and the season-level validation
-confirms the price tag tracks reality.
+confirms the reality.
 
