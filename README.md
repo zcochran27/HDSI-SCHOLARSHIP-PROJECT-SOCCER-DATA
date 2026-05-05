@@ -1,32 +1,38 @@
 # Defensive Duel Value (DDV)
 
-A location-aware, context-aware metric that scores every defensive duel in
-goal-probability units. Positive values mean the defender averted danger
-relative to a league-average baseline at the same pitch location; negative
-values mean they conceded danger. The metric is built from two LightGBM
-models on Wyscout event data, augmented with three speed-of-play context
-features distilled from a nine-feature PCA.
+This metric measures how a defender's action impacts the probability of a team 
+conceding compared to an expected probability. Rewarding defenders for winning difficult
+duels in dangerous spots and penalizing them for losing easy duels in dangerous sports.
+This metric allows you to find defenders that consistently perform better than expected in 
+dangerous situations.
 
 This repository contains the preprocessing pipeline, the training script for
-the SOP-aware DDV models, exploration notebooks for the modelling and
+the relevant models, exploration notebooks for the modelling and
 validation work, and a static web explainer in `index.html`.
 
 ---
 
 ## 1. Background
 
-Most public-facing defender metrics are descriptive — tackles won,
+Valuing actions in soccer is one of the hardest and most crucial parts
+for both game analysis and recruiting. Frameworks like:
+- xG: A probability that shot is scored, 
+- xT: A movement based scoring model that predicts the probability of scoring in the next k actions
+- VAEP: A dynamic scoring model that evaluates how an event affects the current game state (The probability of scoring/conceding)
+
+excel at modeling offensive contributions but struggle with defensive
+actions. While most public-facing defender metrics are descriptive — tackles won,
 interceptions, aerial-duel rate. They count *what happened* and don't ask
-whether the action mattered. A tackle in the centre circle and a last-ditch
-challenge in the six-yard box are scored the same. They also don't account
-for *outcome quality*: a duel that recovers possession is worth far more
-than one that merely halts attacker progress, and both are worth more than
-losing the duel outright.
+whether the action mattered. These metrics don't take into consideration that
+some tackles and duels are harder than others and are more dangerous if they are lost
+(get beat). 
 
-The goal of this project is to assign each defensive duel a single scalar
-that answers a precise question:
+My work takes a counterfactual approach: measuring
+how a defender's action compares to the expected outcome.
 
-> *How much goal probability did this defender remove from the next 20
+The precise value can be labeled as
+
+> *How much goal probability did this defender removes from the next 20
 > seconds of play, relative to what we'd expect at this pitch location given
 > what was happening before the duel?*
 
