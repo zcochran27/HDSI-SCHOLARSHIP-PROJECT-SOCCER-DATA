@@ -49,10 +49,8 @@ the danger realised by the observed outcome — see Section 4.
 ## 2. Data
 
 Data from 800k+ defensive duels across 7k+ Wyscout matches were analyzed. 
-Defensive duels are filtered to the defending half (`start_x < 60` in
-StatsBomb 120×80 coordinates) before training so the model is fit on the
-distribution where the metric is meaningful — duels in the attacking third
-have negligible goal-conceding implications.
+Defensive duels are filtered to the defending half before training so the model is fit on the
+distribution where the metric is meaningful.
 
 The 20-second look-ahead label `outcome ∈ {-1, 0, 1}` (goal conceded /
 neutral / goal scored) is computed by `preprocess.py` from the raw event
@@ -80,9 +78,7 @@ A duel's danger profile depends on more than just where it happens. A duel
 at `(x=30, y=40)` after the opponent has been pushing forward at speed for
 the last 30 seconds is in a very different game state from the same
 coordinates at the start of a slow build-up. We capture this with **speed
-of play (SOP)** features — per-event statistics over a 30-second lookback,
-oriented from the team-of-interest's perspective so that prior-event
-coordinates from the *opposing* team are flipped to `(L − x, W − y)`.
+of play (SOP)** features — per-event statistics over a 30-second lookback window.
 
 The full nine-feature SOP set is:
 
@@ -127,7 +123,7 @@ features while keeping the variance the PCA said mattered. Fully capturing the s
 ### 3.3 Two LightGBM models
 
 Both models are trained on the same 816 K defensive duels in the defending
-half, with an 80/20 stratified train/test split (`random_state=42`).
+half, with an 80/20 stratified train/test split.
 
 **Outcome model.** Multiclass classifier over `{recovered, stopped, beat}`
 with features `(start_x, start_y, delta_x_30s, dist_30s, dist_ratio_30v60)`.
@@ -135,25 +131,7 @@ with features `(start_x, start_y, delta_x_30s, dist_30s, dist_ratio_30v60)`.
 
 **Conditional goal model.** Binary classifier on `(x, y, sop, c)` where `c`
 is the LightGBM-categorical outcome code. The positive class is "goal
-conceded within the 20-second look-ahead" and is rare (~1.6%). `min_child_samples=500`
-keeps the leaves large; we deliberately do **not** apply `scale_pos_weight`
-because the value formula uses *differences* of conditional probabilities,
-and rebalancing would inflate raw scores while still ranking correctly.
-Leaving the model on its native prior keeps calibration tight at low
-predicted probabilities, which is where almost all duels sit.
-
-### 3.4 Why one conditional model, not two unconditional ones
-
-The expected-danger term `P(goal | x, y, sop)` could in principle come from
-a separately trained `(x, y, sop) → goal` model. We don't do that. The
-algebraic identity in Section 4 only holds when both pieces are derived
-from the *same* model, by marginalising the conditional model:
-
-$$P(\text{goal} \mid x, y, \mathrm{sop}) = \sum_c P(c \mid x, y, \mathrm{sop}) \cdot P(\text{goal} \mid c, x, y, \mathrm{sop})$$
-
-Mixing a separate unconditional goal model would introduce residuals that
-reflect *differences in model bias* rather than differences in defender
-performance. Marginalising the same model eliminates that confound.
+conceded within the 20-second look-ahead".
 
 ---
 
@@ -188,34 +166,20 @@ quantity that has to be right.
 | Base rate (positive) | 1.62%    |
 
 ROC AUC of 0.766 on a 1.6% positive rate from `(x, y, c, sop)` features
-alone is a strong signal — the model is reliably ordering high-danger
-states above low-danger states across ~163 K test duels. PR AUC of 0.073 is
-a ~4.5× lift over the 0.016 base prevalence, which is the right-shaped
-result for a sparse, location-conditioned label.
+alone is a strong model.
 
 <p align="center">
   <img src="figures/prediction/roc_goal_cond.png" alt="Goal model ROC" width="400"/>
   <img src="figures/prediction/calibration_goal_cond.png" alt="Goal model calibration" width="400"/>
 </p>
 
-The ROC curve (left) climbs steeply in the bottom-left corner, hitting a
-TPR of ~0.6 at a 20% FPR. That left-corner steepness is what we care
-about for ranking — the high-confidence end of the score distribution
-catches most of the goal-conceding cases. Calibration (right) is excellent
-across the realised range of predicted probabilities (0–8%): the binned
-empirical goal rate tracks the diagonal to within rounding. Because we
-did **not** apply `scale_pos_weight`, predicted probabilities can be read
-directly as expected goal-concession rates rather than as
-monotonic-but-distorted scores. This is the property that makes
-`expected_danger − realized_danger` meaningful as a goal-probability.
 
 ### 5.2 Outcome model
 
-The outcome model is a low-AUC, well-calibrated classifier — and that's
-exactly what we want. Its job is **not** to predict the outcome of any
-individual duel from `(x, y, sop)` (which is impossible — the outcome is
-substantially driven by player skill, body shape, and pressure that aren't
-in the feature set). Its job is to give a calibrated *prior* over the three
+The outcome model is a low-AUC, well-calibrated classifier, which is expected.
+The model still doesn't take into consideration a lot of faetures that go into making defensive duels tough
+such as player skill level, physique, field conditions, and surronding players.
+Its job is to give a calibrated *prior* over the three
 outcome classes at the duel's location and game state, so the marginalisation
 in Section 4 produces an unbiased baseline.
 
@@ -232,25 +196,13 @@ in Section 4 produces an unbiased baseline.
   <img src="figures/prediction/calibration_outcome_ovr.png" alt="Outcome model calibration" width="400"/>
 </p>
 
-OVR AUCs (left) are barely above chance (0.54–0.56). That's the honest
-answer — location and SOP barely move the needle on *which* outcome a
-duel will produce, because the outcome is dominated by features the model
-can't see. What matters here is the *calibration* (right): the three
-curves sit tightly on the diagonal across the entire realised range of
-predictions (~0.2 to ~0.5). This is the property that makes the model
-usable as a probabilistic prior — the predicted probabilities match
-empirical class rates, so when we marginalise them against the
-conditional goal model in Section 4 we get an unbiased expected danger.
-
 ---
 
 ## 6. What the models look like on the pitch
 
 Heat maps are produced by evaluating the trained models on a 120 × 100
 grid of `(x, y)` points covering the defensive half, with the SOP features
-held at their dataset medians. The pitch is rendered with `mplsoccer` on
-the UCSD navy poster background. All maps are oriented so attackers move
-left-to-right; the pitch shown is the defending half.
+held at their dataset medians. 
 
 ### 6.1 Where defensive duels happen
 
@@ -260,7 +212,7 @@ left-to-right; the pitch shown is the defending half.
 
 Duels concentrate along the wings and at the box edges, with vertical
 striping driven by the discrete pixel grid of player positions in the
-event data. The box itself sees fewer duels — by the time an attacker
+event data. The box itself sees fewer duels which is expected because by the time an attacker
 gets there, defenders have usually already engaged or shots have already
 been taken.
 
@@ -334,7 +286,7 @@ assigns:
 
 ---
 
-## 7. How the SOP features bend the surface
+## 7. How the SOP features impact the surface
 
 For each chosen SOP feature we held the other two SOP features at the
 dataset median and the pitch coordinates at every `(x, y)`, then varied
@@ -435,8 +387,6 @@ goals conceded as the target and report R²:
 | `groundDuel_stoppedProgress_count`       | 0.05  |
 | `groundDuel_recoveredPossession_count`   | 0.01  |
 | `groundDuel_stoppedProgress_rate`        | 0.00  |
-
-Two readings:
 
 **`duel_value` beats every counting and rate stat.** Total season duel
    value (R² = 0.11) and per-duel mean duel value (R² = 0.10) are the
